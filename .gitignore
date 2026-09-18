@@ -32,9 +32,11 @@ __pycache__/
 # ---------------------------------------------------------------------------
 data/raw/*
 data/processed/*
+data/pilot/
 !data/**/.gitkeep
 data/manifest.json
 *.csv
+!pilot/labels_model.csv
 *.parquet
 *.dat
 

@@ -1,0 +1,101 @@
+edgeId,label,confidence,note
+e001,load-bearing,high,method reuse ("assayed as earlier described"); citing paper is itself retracted
+e002,background,low,context describes lymphoid hyperplasia as a common finding; seed not named in sentence
+e003,critical,high,notes flaws and Lancet retraction
+e004,critical,medium,origin of controversy (rubric convention)
+e005,load-bearing,high,states seed finding as fact
+e006,critical,medium,"claimed" in a paper about counter-knowledge
+e007,background,low,"suggested a potential link"; neutral wording in an ethics review
+e008,critical,high,"now debunked"
+e009,critical,high,reports the retraction
+e010,unclear,high,garbled reference-list fragment; no usable context
+e011,load-bearing,high,review states mechanism as fact
+e012,critical,high,cites hypothesis then evidence against it
+e013,load-bearing,medium,"has been reported" then concludes from it; duplicate of e019/e022/e066
+e014,background,low,neutral "suggested a link" in a social-media pitfalls paper
+e015,background,medium,"preliminary work suggesting a link"; Spanish version of e065
+e016,background,medium,explains a treatment rationale without endorsing it
+e017,critical,high,"subsequently disproven and retracted"
+e018,background,low,neutral description; sceptical tone ("somehow")
+e019,load-bearing,medium,duplicate of e013
+e020,load-bearing,low,HARD: hedged "suggested" plus "but see", yet the paper's own hypothesis builds on the MMR link
+e021,background,medium,anthropological description of parental views
+e022,load-bearing,medium,duplicate of e013
+e023,load-bearing,high,"increasing evidence has revealed" anti-cancer role
+e024,load-bearing,high,authors' own follow-up ("we have recently described")
+e025,load-bearing,medium,hedged but used as rationale for a miR-195 study
+e026,background,medium,"have recently reported"
+e027,load-bearing,high,cited as corroborating the paper's own findings
+e028,critical,high,notes retraction
+e029,critical,high,misinformation example; retracted
+e030,background,medium,"putative link"
+e031,critical,high,example of faulty content
+e032,load-bearing,low,one of a list asserting treatments suppress GC proliferation
+e033,background,medium,"suggested / claimed a link"
+e034,background,low,describes findings in a critical review; mildly sceptical
+e035,critical,medium,origin of a public scare (rubric convention)
+e036,critical,high,unethical conduct; retracted
+e037,background,high,"suggested the hypothesis"
+e038,critical,high,exposes misreported participant histories
+e039,load-bearing,high,states mechanism as fact
+e040,critical,high,debunked; fraud
+e041,critical,high,discredited; cited by those disproving it
+e042,background,low,"possibly linked"; motivates differential diagnosis
+e043,background,high,"it has also been suggested"
+e044,critical,high,"infamous case series"
+e045,load-bearing,medium,states the finding as fact with no dispute
+e046,load-bearing,medium,lists seed as evidence for an environmental cause (also misattributes it to thimerosal)
+e047,critical,high,"false fear... now discredited"
+e048,load-bearing,high,states finding as fact; duplicate of e070
+e049,load-bearing,medium,cited as precedent motivating a bladder-cancer study
+e050,critical,high,fabricated data
+e051,critical,high,misinformation example
+e052,load-bearing,medium,duplicate of e025
+e053,critical,high,fraud
+e054,critical,high,"proposed... not supported by any" study
+e055,critical,medium,"alleged link"; origin of controversy
+e056,background,high,neutral description of the report
+e057,load-bearing,high,review table lists mechanism as established
+e058,load-bearing,high,states effect as fact
+e059,load-bearing,medium,same review-table row as e057
+e060,critical,medium,"alleged links"; adverse publicity
+e061,critical,medium,origin of controversy in a review
+e062,background,medium,neutral "published an article linking"
+e063,unclear,high,context unrelated to seed; likely misattributed citation
+e064,background,high,"raised the issue of a possible causal relationship"
+e065,background,medium,duplicate of e015 (English version)
+e066,load-bearing,medium,duplicate of e013
+e067,critical,high,criticises tiny sample
+e068,critical,high,"aujourd'hui infirme" (now refuted)
+e069,critical,high,"falsified report"
+e070,load-bearing,high,duplicate of e048
+e071,load-bearing,high,"Colitis is not uncommon" stated as fact
+e072,background,medium,same framing as e021
+e073,load-bearing,medium,seed finding used as rationale for a supplement trial
+e074,critical,high,example of data falsification
+e075,critical,medium,points out the paper did not prove its hypothesis
+e076,background,high,"possibility of linkage was raised"
+e077,critical,medium,origin of a public scare (rubric convention)
+e078,background,high,neutral description of the investigation
+e079,background,low,"perhaps even..." immediately discounted; could be critical
+e080,background,low,describes publication context; misnames author
+e081,critical,high,"despite compelling evidence to the contrary"
+e082,critical,high,retracted; conclusions false
+e083,critical,high,retracted
+e084,critical,high,"in reality non-existent association"
+e085,load-bearing,medium,duplicate framing of e025
+e086,load-bearing,medium,states miR-195-5p finding as fact
+e087,load-bearing,high,duplicate of e023
+e088,critical,high,discredited; retracted
+e089,critical,high,retracted research
+e090,critical,high,famously retracted
+e091,critical,medium,misconceptions about vaccines
+e092,critical,high,discredited; retracted
+e093,critical,high,retracted for falsification
+e094,critical,high,infamous case
+e095,critical,high,notes retraction
+e096,critical,high,criticises design (no controls)
+e097,critical,medium,origin of negative publicity
+e098,background,medium,used as a timeline reference point
+e099,background,low,listed among studies without consistent evidence; could be critical
+e100,load-bearing,high,states effect as fact

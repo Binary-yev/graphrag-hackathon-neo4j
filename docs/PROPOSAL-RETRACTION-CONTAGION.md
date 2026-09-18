@@ -104,25 +104,41 @@ Ranking by citation count is wrong. Ranking by post-retraction citations is
 wrong. The thing you want to rank by is **structural dependency**, and you only
 get that by looking at each citation edge and asking what it is doing.
 
-### Step 4 — a session with the agent
+### Step 4 — what the pilot actually found
+
+This step was a hypothetical until the pilot ran. These are measured results
+(full write-up in [../pilot/RESULTS.md](../pilot/RESULTS.md)). 100 citation
+edges, classified blind from the citing sentence alone:
+
+| Group | load-bearing | background | critical | unclear |
+| --- | --- | --- | --- | --- |
+| Propofol (paper mill) | **23 of 23** | 0 | 0 | 0 |
+| Wakefield, cited before retraction | 5 | 19 | 14 | 0 |
+| Wakefield, cited after retraction | **1** | 6 | **30** | 2 |
+
+Every propofol citation that could be read treats the fabricated result as
+established fact, in review tables, as the rationale for new studies, and as
+corroboration of new findings. Wakefield after retraction is overwhelmingly
+cited to refute it. The inversion from Step 3 holds up in the data.
+
+A session with the agent is meant to look like this (illustrative wording,
+pilot numbers):
 
 ```
 > A 2018 gastric cancer paper was retracted as a paper mill product.
   What research is still resting on it?
 
   [vector search over abstracts + retraction notices → seed paper]
-  [graph: 51 citing works, 47 published before the retraction]
-  [classify each citation edge]
+  [graph: citing works, split by publication date vs retraction date]
+  [classify each citation edge from its citing sentence]
 
-  Of 51 citing papers, 47 predate the retraction.
-  Classified: 31 load-bearing, 12 background, 8 unclear.
+  Every citation with a readable context (23, roughly 16-18 distinct
+  papers after deduplication) treats the retracted result as established fact.
+  Context was available for 39% of citing papers; the rest are
+  unclassified and reported separately.
 
-  The 31 load-bearing citers have themselves been cited 890 times.
-  Three are systematic reviews, which means the claim has been
-  aggregated into the secondary literature.
-
-  Highest-risk descendant: [title], cited 112 times, cites the
-  retracted work as the sole support for its central mechanism.
+  Load-bearing examples: two review articles tabulating the mechanism,
+  and studies in ovarian, bladder and lung cancer citing it as rationale.
 
   Cypher used: ...
 ```
@@ -396,24 +412,28 @@ These go into the agent rules, not just this document.
 
 ## Risks
 
-| Risk | Severity | Mitigation |
-| --- | --- | --- |
-| Citation classification is unreliable | **fatal** | Pilot on 100 edges before building anything |
-| Abstract coverage is 54%, not 100% | medium | Fill from Crossref notice text; choose seeds that have abstracts |
-| Full citation context is not in OpenAlex | medium | Classify from abstract + title + topic overlap; note the limitation |
-| OpenAlex rate limits during bulk pull | low | Polite pool, cache locally, or use the S3 snapshot |
-| Generation 2 explodes | handled | Selective traversal is the design, not a workaround |
+| Risk | Severity | Status after pilot | Mitigation |
+| --- | --- | --- | --- |
+| Citing-sentence coverage is low (21% Wakefield, 39% propofol in Semantic Scholar) | **high** | **new, now the largest risk** | Fallback classification from citing abstract at lower confidence; test open-access full-text extraction; report coverage with every count |
+| Citation classification is unreliable | high | plausible: blind labels separate the cases cleanly; **not yet checked against human labels** | Human-label the same 100 edges; gate at kappa ≥ 0.6 and load-bearing precision/recall ≥ 80% |
+| Duplicate and misattributed records in Semantic Scholar | medium | new: ~20% duplicate inflation on the propofol seed, 2% misattributed contexts | Deduplicate on DOI then normalised title as a tested staging step; never propagate through `unclear` |
+| Abstract coverage is 54%, not 100% | medium | unchanged | Fill from Crossref notice text; prefer seeds with abstracts |
+| OpenAlex and Semantic Scholar disagree on citation counts | low | new | Name the source on every count |
+| API rate limits during bulk pulls | low | seen once, handled by backoff | Cache locally; OpenAlex S3 snapshot for bulk |
+| Generation 2 explodes | handled | unchanged | Selective traversal is the design, not a workaround |
 
-**The classification risk is the whole project.** If a model cannot reliably tell
-"builds on" from "argues against", there is no product.
+The pilot moved the main risk. Before it, the question was whether a model can
+tell "builds on" from "argues against"; the blind labels suggest it can, pending
+human agreement. The new binding constraint is **how often the citing sentence
+exists at all**.
 
 ---
 
 ## Build order
 
-1. **Pilot (gate).** One seed, pull direct citers, hand-label 100 citation
-   contexts, measure classification accuracy. **Do not load Aura until this
-   passes.**
+1. **Pilot (gate).** Done for model labels on 100 edges; see
+   [../pilot/RESULTS.md](../pilot/RESULTS.md). **Remaining: human labels on the
+   same 100 edges and an agreement score. Do not load Aura until that passes.**
 2. Load seeds + generation 1 + retraction metadata.
 3. Embed abstracts and notice text; build the vector index.
 4. Classify generation-1 edges; expand generation 2 along load-bearing edges.
@@ -434,4 +454,5 @@ See [../IDEATION.md](../IDEATION.md).
 - [Retraction Watch via Crossref](https://www.crossref.org/documentation/retrieve-metadata/retraction-watch/) — downloaded and profiled 2026-09-18
 - [Crossref acquires Retraction Watch, CC0](https://www.crossref.org/blog/news-crossref-and-retraction-watch) — September 2023
 - [Crossref REST API](https://api.crossref.org)
+- [Semantic Scholar Graph API](https://api.semanticscholar.org/api-docs/graph) — citation contexts, queried live 2026-09-18
 - Design concepts: [CONCEPTS.md](CONCEPTS.md), from [JeremyMorgan/neo4j-airport-resilience-agent](https://github.com/JeremyMorgan/neo4j-airport-resilience-agent)
