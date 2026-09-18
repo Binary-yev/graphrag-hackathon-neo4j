@@ -100,13 +100,15 @@ up the server.
 | Path | Purpose |
 | --- | --- |
 | [AGENTS.md](AGENTS.md) | Rules and conventions for AI agents working in this repo |
-| [IDEATION.md](IDEATION.md) | Candidate project directions and dataset feasibility |
+| [IDEATION.md](IDEATION.md) | Candidate directions, scored and ranked |
+| [docs/CONCEPTS.md](docs/CONCEPTS.md) | Reusable design concepts extracted from prior art |
 | [.github/agents/](.github/agents/) | Custom domain-agent definitions |
 | [.github/skills/](.github/skills/) | Reusable agent workflows |
 | [cypher/](cypher/) | Reference Cypher queries |
 | [data/](data/) | Source and derived data — contents gitignored |
-| [docs/GRAPH_MODEL.md](docs/GRAPH_MODEL.md) | Proposed graph schema, node/edge budget |
-| [sql/](sql/) | BigQuery sizing and extraction queries |
+| [docs/CANDIDATE-MEDICARE.md](docs/CANDIDATE-MEDICARE.md) | Parked candidate — verified feasibility work |
+| [docs/GRAPH_MODEL.md](docs/GRAPH_MODEL.md) | Graph schema for the parked Medicare candidate |
+| [sql/](sql/) | BigQuery queries for the parked Medicare candidate |
 | [scripts/](scripts/) | Python utilities (connection, schema, loaders) |
 | `keys/` | Aura credentials — **gitignored, never committed** |
 

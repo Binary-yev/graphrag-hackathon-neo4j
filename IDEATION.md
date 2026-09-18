@@ -1,295 +1,246 @@
 # Ideation — not locked
 
-Working notes on the candidate direction. Nothing here is a commitment. The
-README stays domain-neutral until a direction is chosen.
+Candidate directions, scored against the design concepts in
+[docs/CONCEPTS.md](docs/CONCEPTS.md). Every data claim below was verified
+against a live API on 2026-09-18.
 
-Every number below was measured against the live BigQuery public dataset and the
-current OIG exclusion file on 2026-09-18, not estimated. The queries are in
-[sql/](sql/).
+## Where the previous round landed
+
+Medicare provider anomaly triage, South Florida 2015 — feasible, verified, and
+**parked**. Full writeup in [docs/CANDIDATE-MEDICARE.md](docs/CANDIDATE-MEDICARE.md).
+It works, but it fails C10 (a Medicare peer-group argument takes three minutes
+to explain) and its retrieval step was bolted on rather than load-bearing. Still
+revivable; the feasibility work stands.
+
+## The brief
+
+Inherit C1–C11 from Jeremy's repo and fix C12, the thing his workshop has none
+of: **semantic retrieval has to be the entry point into the graph**, not a
+garnish. The target shape:
+
+> text question → vector search finds the entry nodes → graph traversal does the
+> reasoning → evidence path comes back
 
 ---
 
-## Candidate A — Medicare provider anomaly triage (current front-runner)
+# Candidate 1 — Retraction contagion  ★ recommended
 
-**The pitch.** Load public Medicare billing data into Neo4j as a provider graph.
-Let an agent take a plain-language description of a fraud scheme, find the
-billing codes that scheme actually uses, traverse to the providers whose billing
-structure matches it, and rank them against their peers with graph evidence.
+**The hook.** *"This paper was retracted. What is still standing on top of it?"*
 
----
+That is C1 with the serial numbers filed off — a retraction is an outage, and
+the citation descendants are the reachability loss. Except the stakes are
+better than a cancelled flight: somewhere downstream is a clinical guideline or
+a meta-analysis whose foundation quietly disappeared.
 
-## 1. The tables
+### The data (verified, free, no API keys)
 
-### Available
+| Source | What it gives | Verified |
+| --- | --- | --- |
+| [OpenAlex](https://api.openalex.org) | 135,642 works flagged `is_retracted`; `referenced_works` (outbound citations), `cites:` filter (inbound), authorships, topics | queried live |
+| [Retraction Watch](https://api.labs.crossref.org/data/retractionwatch) via Crossref Labs | 72,602 records, 69,929 with `OriginalPaperDOI`, free CSV, 66 MB | downloaded and profiled |
+| Crossref REST | 75,562 retraction notices with `update-to` links | queried live |
 
-`bigquery-public-data.cms_medicare` contains 23 tables. Verified inventory:
+Retraction Watch columns: `Title, Subject, Institution, Journal, Publisher,
+Country, Author, ArticleType, RetractionDate, RetractionDOI, OriginalPaperDate,
+OriginalPaperDOI, RetractionNature, Reason, Notes`.
 
-| Table | Grain | Rows | Size |
-| --- | --- | --- | --- |
-| `physicians_and_other_supplier_2012..2015` | NPI x HCPCS x place of service | 9.5M (2015) | 2.37 GB |
-| `part_d_prescriber_2014` | NPI x drug | 24.1M | 3.78 GB |
-| `referring_durable_medical_equip_2013/2014` | one row per referring NPI | 366k | 0.12 GB |
-| `inpatient_charges_2011..2015` | hospital x DRG | — | — |
-| `outpatient_charges_2011..2015` | hospital x APC | — | — |
-| `home_health_agencies_2013/2014`, `hospice_providers_2014`, `nursing_facilities_2013/2014` | facility attributes + quality measures | — | — |
-| `hospital_general_info` | hospital reference data | — | — |
-
-### What I would actually use
-
-**Primary — `physicians_and_other_supplier_2015`.** This is the backbone. Grain
-is one row per (NPI, HCPCS code, place of service), which is already an edge
-list. The columns that matter:
-
-| Column | Role in the graph |
-| --- | --- |
-| `npi` | `:Provider` node key |
-| `nppes_provider_last_org_name`, `..._first_name`, `nppes_entity_code` | provider identity, individual vs organisation |
-| `provider_type` | `:Specialty` — one half of the peer group |
-| `nppes_provider_state`, `nppes_provider_zip`, `nppes_provider_city` | geography — the other half of the peer group |
-| `hcpcs_code` | `:Procedure` node key |
-| **`hcpcs_description`** | **the text that gets embedded — this is what makes it GraphRAG** |
-| `hcpcs_drug_indicator` | flags drug codes |
-| `line_srvc_cnt`, `bene_unique_cnt`, `bene_day_srvc_cnt` | edge weights: volume, distinct patients, patient-days |
-| `average_submitted_chrg_amt`, `average_medicare_payment_amt`, `average_medicare_allowed_amt` | edge weights: money, and the charge-to-paid ratio |
-
-Two derived signals worth computing at load time, because they are classic
-abuse indicators and cost nothing to add:
-
-- `line_srvc_cnt / bene_unique_cnt` — services per patient. High values mean the
-  same patient is billed for the same thing repeatedly.
-- `average_submitted_chrg_amt / average_medicare_allowed_amt` — the markup
-  ratio.
-
-**Secondary — `referring_durable_medical_equip_2014`.** Small (366k rows, one
-row per referring provider) and the richest single fraud signal in the dataset.
-`number_of_suppliers` is the number of distinct DME suppliers a provider sent
-business to. Measured distribution:
-
-| State | Referring providers | Median suppliers | p99 | Max | DME paid |
-| --- | --- | --- | --- | --- | --- |
-| TX | 22,489 | 10 | 77 | 322 | $296.4M |
-| CA | 28,655 | 10 | 72 | 138 | $289.3M |
-| FL | 22,314 | 10 | 82 | **200** | $287.6M |
-| NY | 23,728 | 9 | 66 | 204 | $178.8M |
-| MI | 13,739 | 11 | 70 | 200 | $160.3M |
-
-A 20x gap between the median and the maximum. A physician routing patients to
-200 different DME suppliers in one year is not a normal practice pattern. These
-become `:Provider` properties, not edges — the table is provider-level and does
-not name the suppliers.
-
-**Third — `part_d_prescriber_2014`** for `(:Provider)-[:PRESCRIBED]->(:Drug)`.
-Optional. It adds controlled-substance angles but also 24M rows to filter, and
-it is a different year from the billing backbone. Add it only if there is time.
-
-### What is *not* there — the correction to the original idea
-
-There is **no provider-to-provider referral edge anywhere in this dataset.**
-`referring_durable_medical_equip_*` sounds like it has one, but its grain is one
-row per referring provider with aggregate counts — it never names the supplier
-on the other end. Every table here is provider-to-*service*, not
-provider-to-*provider*.
-
-Real referral edges live in a separate CMS release,
-[Physician Shared Patient Patterns](https://www.nber.org/research/data/physician-shared-patient-patterns-data)
-(NBER-hosted, 2009–2015), which links two providers who treated the same patient
-within 30/60/90/180 days. It is a bulk download, roughly ten million edges per
-year nationally.
-
-**So the provider-to-provider edges have to be derived, not loaded:**
-
-- `(:Provider)-[:PEER_OF]->(:Provider)` — same `provider_type`, same geography.
-  Defines the comparison group.
-- `(:Provider)-[:SIMILAR_BASKET_TO {jaccard}]->(:Provider)` — overlap in the set
-  of HCPCS codes billed. This is the interesting one: providers running the same
-  scheme bill the same unusual basket, and that shows up as a dense cluster.
-
-Keying `:Provider` on NPI from day one means the real shared-patient edges can
-be layered in later without a remodel, if the schedule allows.
-
-### Labels — OIG LEIE
-
-The [OIG List of Excluded Individuals and Entities](https://oig.hhs.gov/exclusions/exclusions_list.asp)
-is a free 15 MB CSV, refreshed monthly, holding exclusions currently in effect.
-Columns: `LASTNAME, FIRSTNAME, MIDNAME, BUSNAME, GENERAL, SPECIALTY, UPIN, NPI,
-DOB, ADDRESS, CITY, STATE, ZIP, EXCLTYPE, EXCLDATE, REINDATE, WAIVERDATE,
-WVRSTATE`.
-
-**Caution, and the reason to check before building on it: only 10.6% of records
-carry a usable NPI** — 8,700 of 84,001. The rest predate NPI collection or are
-individuals without one. Join on name/state for the remainder is fuzzy and not
-worth the time here.
-
-Measured overlap against FL providers in the 2015 billing file:
+`RetractionNature` splits 67,050 retractions / 3,718 expressions of concern /
+1,525 corrections / 160 reinstatements. `Reason` is a 112-token taxonomy; the
+top values are a story in themselves:
 
 ```text
-FL 2015 Medicare providers           59,326
-LEIE records with usable NPI          8,700
-FL providers found in LEIE              149   <-- the label set
-2015 Medicare paid to those 149    $23.6M
+Investigation by Journal/Publisher                    32,181
+Unreliable Results and/or Conclusions                 21,996
+Concerns/Issues about Data                            15,925
+Compromised Peer Review                               11,872
+Paper Mill                                            11,798
+Computer-Aided Content or Computer-Generated Content   9,280
+Duplication of/in Image                                5,669
 ```
 
-Exclusion year of those 149: **3 in 2015, the other 146 in 2016–2026.** That is
-the whole story — the labels land *after* the billing year, so this is a genuine
-forward-looking test, not a lookup. Exclusion types: 55 `1128b4` (licence
-revocation, often not fraud), 44 `1128a1` (program-related crime conviction), 20
-`1128a4` (felony controlled substance), 19 `1128a3` (felony health-care fraud).
-Roughly 87 of the 149 are fraud-relevant types.
+Nearly 12,000 paper-mill retractions and over 9,000 for machine-generated
+content. That is a live, current problem, not a historical curiosity.
+
+The seed set writes itself — the most-cited retracted papers are famous:
+
+```text
+ 5,536 cites  STAP cells / pluripotency of mesenchymal stem cells
+ 4,965 cites  Hydroxychloroquine + azithromycin for COVID-19 (Surgisphere)
+ 4,297 cites  6-month consequences of COVID-19
+ 4,266 cites  PREDIMED Mediterranean diet primary prevention
+ 2,963 cites  Wakefield, ileal-lymphoid-nodular hyperplasia (MMR)
+```
+
+### The sizing result that reshapes the design
+
+Measured fan-out from one seed (Wakefield, 2,963 direct citers): the median
+direct citer has **622 citations of its own**. Generation 2 for that single seed
+is ~1.8M works. Aura Free holds 200,000 nodes.
+
+So full breadth-first contagion is impossible, and that is the good news,
+because it forces the interesting move:
+
+**Selective traversal.** Not every citation is load-bearing. A paper that cites
+Wakefield *to refute it* is not standing on it. A paper that cites it as the
+basis for its method is. The agent classifies each citation edge — load-bearing
+/ background / critical — and **only load-bearing edges propagate contagion**.
+
+That is an LLM making a traversal decision per edge, which is a genuinely
+different thing from an LLM writing one Cypher query. It is the novelty of the
+project, and the node budget is what forces it.
+
+Budget with selective traversal:
+
+```text
+15 seeds, generation 1 complete      ~51,000 works    (measured)
+generation 2, load-bearing only      ~10-20,000       (estimated, needs a pilot)
+authors, journals, retraction notices ~20,000
+total                                 ~90,000 nodes   — fits, with headroom
+```
+
+### Where retrieval is load-bearing (C12)
+
+Embed: OpenAlex abstracts (54% coverage, measured) + retraction notice text +
+the `Notes` field. The question is not keyword-shaped:
+
+> *"Which downstream papers depend on the claim that this intervention reduces
+> mortality?"*
+
+You cannot grep that. The dependency is semantic — it lives in how the citing
+paper describes what it took from the source. Vector search finds the entry
+points, and the graph decides what is downstream of them.
+
+### Concepts inherited
+
+| | How it maps |
+| --- | --- |
+| C1 | Retraction = outage. Direct lift. |
+| C2 | Never delete the retracted node — mark it and exclude it from support paths. |
+| C3 | Baseline: what the field believed. Counterfactual: same graph, retracted claim excluded. |
+| C4 | "Most damaged" ≠ most citations. Depth of dependency, citations *after* the retraction date, whether the citer is in a clinical guideline. |
+| C5 | **Citing a retracted paper is not misconduct.** Many citers cite it to criticise it; many cited it before retraction. This is the exact analogue of the OpenFlights historical-data rule, and it has to be in the agent rules. |
+| C6 | Named traps: citation count vs unique citing works; retraction date vs publication date; expression of concern is not a retraction. |
+| C7 | Skills: `contagion-trace`, `classify-citation`, `compare-two-retractions`. |
+| C8 | Scorecard maps cleanly — did it use the graph, did it respect the retraction date, did it distinguish criticism from dependence. |
+| C9 | lookup → count citers → trace paths → contagion → *"find a still-active research line resting on retracted work that nobody has flagged."* |
+| C10 | "This paper was retracted, what still depends on it" needs no glossary. |
+
+### Risks
+
+- Abstract coverage is 54%, not 100%. Retraction notice text partially fills the
+  gap; the seed set should be chosen from works that have abstracts.
+- Citation classification quality is the whole project. Needs a pilot on ~100
+  edges before committing.
+- OpenAlex is rate-limited for anonymous use; add a mailto for the polite pool.
 
 ---
 
-## 2. Scope — what fits in Aura Free
+# Candidate 2 — Dependency blast radius (pragmatic fallback)
 
-Aura Free caps at **200,000 nodes / 400,000 relationships**. Measured options:
+**The hook.** *"This advisory just dropped. What in the stack breaks, and what is
+the minimum upgrade that fixes it?"*
 
-| Scope | Providers | Billed edges | Nodes | LEIE labels | Fits? |
-| --- | --- | --- | --- | --- | --- |
-| FL statewide | 59,326 | 695,541 | ~65k | 149 | **over cap** |
-| South FL (zip3 330–334, 339, 341–342) | 23,678 | 269,223 | ~30k | 68 | yes |
-| Tri-county + SW coast | 19,532 | 208,158 | ~26k | 63 | yes |
-| Miami-Dade + Broward only | 11,970 | 105,296 | ~18k | 40 | yes |
-| FL statewide, top-8 codes per provider | 59,326 | 332,614 | ~65k | 149 | yes, but tight |
+### Data (verified, free, no keys)
 
-**Recommended: South Florida, 2015.** Reasons:
+- **OSV.dev** — `POST /v1/query` returned 10 advisories for `npm:lodash`, each
+  with a prose `details` field (763 chars on the sample) and structured
+  `affected` version ranges. The prose is genuinely embeddable.
+- **deps.dev** — `express@4.18.2` resolved to 71 transitive dependency nodes and
+  128 edges. Roughly 70 nodes per package means a realistic 40-service estate
+  fits comfortably.
 
-1. 269k billed edges leaves ~110k relationship headroom for the derived
-   `:PEER_OF` and `:SIMILAR_BASKET_TO` edges — and those derived edges *are* the
-   analysis. The statewide top-8 option leaves only ~47k, which is not enough.
-2. Truncating to top-K codes per provider throws away exactly the rare codes
-   that carry the fraud signal. Geographic scoping does not distort the basket.
-3. Geography is the correct peer-group boundary anyway — comparing a Miami
-   podiatrist to a rural Montana one is not a comparison.
-4. 68 labels is enough to report precision@50 honestly.
-5. South Florida is the genuine Medicare fraud epicentre, so the narrative is
-   real rather than arbitrary.
+### Why it scores well
 
-`:Procedure` nodes cost almost nothing: **5,983 distinct HCPCS codes nationally,
-5,421 distinct descriptions.** The entire vector index is under 6,000 embeddings.
+C1 maps perfectly (a yanked package *is* an outage). C2 is natural — exclude the
+vulnerable version from resolution rather than deleting it. C10 is excellent for
+a developer audience. Retrieval is real: advisory prose says "prototype pollution
+in deeply nested merge", which no lexical search over package names will find.
 
----
+A stronger variant folds in **bus factor** — maintainer nodes, so the question
+becomes *"if this one maintainer walks away, what is downstream?"* The xz-utils
+angle. More novel than CVE propagation alone.
 
-## 3. The GraphRAG use case
+### Why it is second
 
-The honest problem with "find billing outliers" as a hackathon entry is that it
-is graph analytics with an agent bolted on. There is no retrieval, so it is not
-GraphRAG. Here is the version that is.
-
-### The retrieval loop
-
-**Question:** *"Show me providers who look like the orthotic brace scheme."*
-
-1. **Vector retrieval over text.** Embed the 5,421 `hcpcs_description` strings
-   as `:Procedure` nodes, plus chunked DOJ and HHS-OIG enforcement press
-   releases as `:SchemeNarrative` nodes. The question hits the vector index and
-   returns the scheme narrative *and* the specific codes it maps to — L0648,
-   L0650, L1832 and friends. The billing file calls these "knee orthosis, rigid,
-   custom fabricated"; nobody types that, and nobody knows the code. **Lexical
-   search fails here and vector search succeeds** — that is the retrieval step
-   doing real work, not decoration.
-
-2. **Graph traversal from the retrieved entry points.** From those `:Procedure`
-   nodes, walk to every `:Provider` that billed them, then out to
-   `:PEER_OF` to build the comparison group, and compute deviation within it.
-
-3. **Second-hop structural reasoning.** For the providers that stand out: what
-   *else* do they bill? Do they cluster with each other via
-   `:SIMILAR_BASKET_TO`? Is the cluster geographically tight? Is anyone in it
-   within one or two hops of a provider already carrying an `:Exclusion`?
-
-4. **Answer with an evidence path.** Ranked leads, each with the peer group used,
-   the deviation, the cluster it sits in, and the Cypher that produced it.
-
-### Why this needs a graph
-
-Step 1 alone is plain RAG and returns a document. Step 2 alone is SQL. The parts
-that are neither:
-
-- **Basket similarity clustering.** "Which providers bill a near-identical
-  unusual set of codes?" is a self-join over set overlap — expressible in SQL,
-  miserable, and it does not compose with anything else.
-- **Proximity to known-bad.** "Which still-active providers are two hops from an
-  excluded provider through shared billing patterns?" is a variable-length path
-  query. This is where a graph stops being a preference.
-- **Structural position.** Betweenness and community detection ask *where a
-  provider sits*, not *what they billed*. A high-volume provider in the middle of
-  a dense lookalike cluster is a different object from an equally high-volume
-  provider sitting alone, and only the graph can tell them apart.
-- **Composability.** The agent chains retrieval into traversal into ranking in
-  one pass, then follows up on its own findings. That is the demo.
-
-### The validation claim
-
-Because the labels land after the billing year, the headline is measurable:
-
-> Using only 2015 billing structure, the top-50 structural anomalies contain
-> N providers who were excluded from federal healthcare programs in 2016–2026.
-
-If N is meaningfully above the base rate (68 labels in 23,678 providers, so
-~0.29%; a random top-50 would expect 0.14 hits), that is a real result. If it is
-not, that is *also* reportable and more interesting than a fraud score nobody
-checked. Either way it beats an unvalidated number.
+Novelty. Judges have seen software composition analysis. The honest summary is
+"Dependabot with semantic search and a graph," which is useful but not
+surprising. Candidate 1 asks a question nobody has a tool for.
 
 ---
 
-## 4. Framing
+# Candidate 3 — Paper mill cluster detection
 
-The data is public *aggregate* billing data. A statistical outlier is not fraud
-and usually has a benign explanation: a regional referral centre, a sicker
-patient panel, the only specialist in a county, a small denominator. Note that
-55 of the 149 FL labels are licence revocations, which frequently have nothing
-to do with billing at all.
+11,798 paper-mill retractions, and mills produce *clusters* — shared authors,
+recycled images, templated phrasing, citation rings. Finding **unretracted**
+papers sitting inside a known mill cluster is a graph problem and a genuinely
+novel one.
 
-Frame the output as **anomaly triage and lead generation for a human
-investigator**, and build that into the agent rules: always state the peer group,
-always offer a benign explanation, never assert wrongdoing about a named real
-provider. This is already in [AGENTS.md](AGENTS.md).
+Strong C4 (what defines cluster membership?) and a natural C9 discovery moment.
+But it carries the same accusatory-framing risk that got the Medicare idea its
+ethics caveat, and the labels are weaker.
 
----
-
-## 5. Open questions
-
-- [ ] Confirm South Florida over statewide-truncated. Leaning South Florida.
-- [ ] Where do the 5,421 embeddings get generated, and do `:Procedure` vector
-      properties fit the Aura Free node budget alongside the graph? (They should
-      — 6k nodes is nothing — but confirm the index builds.)
-- [ ] How many DOJ/OIG enforcement press releases to chunk, and can provider
-      names in them be resolved to NPIs, or do they stay as scheme-level text?
-- [ ] `:SIMILAR_BASKET_TO` threshold — what Jaccard cutoff keeps the derived
-      edge count under the ~110k headroom?
-- [ ] Is `part_d_prescriber_2014` worth the year mismatch against 2015 billing?
+**Recommendation: build this as a feature of Candidate 1, not a separate
+project.** The data is already loaded and the `Reason` field already tags it.
 
 ---
 
-## Candidate B — Open Payments influence graph (fallback)
+# Candidate 4 — Sanctions and ownership blast radius
 
-`(:Company)-[:PAID]->(:Physician)-[:PRESCRIBED]->(:Drug)`, from CMS Open
-Payments plus Part D. Joins on NPI exactly like Candidate A, so it reuses the
-same `:Provider` model — a short pivot rather than a restart if A stalls. The
-question, does industry payment correlate with prescribing, is well-trodden:
-lower risk, lower ceiling.
+*"Sanction this entity — who else is captured three hops out through shell
+ownership?"* [OpenSanctions](https://www.opensanctions.org) is free and rich, and
+ICIJ Offshore Leaks is a real graph dataset.
 
----
-
-## Candidate C — something non-healthcare
-
-Not developed. Only worth opening if A and B both hit a wall.
+Great hook, great demo. **Novelty discount:** ICIJ Offshore Leaks is one of
+Neo4j's own long-standing demo datasets. These judges have seen it. Worth
+knowing before choosing it, not a disqualifier.
 
 ---
 
-## Sources checked
+# Candidate 5 — Statutory cross-reference
 
-- `bigquery-public-data.cms_medicare` — queried directly, 2026-09-18
-- [OIG LEIE downloadable files](https://oig.hhs.gov/exclusions/exclusions_list.asp) — downloaded and profiled, 2026-09-18
-- [Medicare Physician & Other Practitioners](https://data.cms.gov/provider-summary-by-type-of-service/medicare-physician-other-practitioners)
-- [Medicare DME by Referring Provider](https://data.cms.gov/provider-summary-by-type-of-service/medicare-durable-medical-equipment-devices-supplies/medicare-durable-medical-equipment-devices-supplies-by-referring-provider-and-service)
-- [Physician Shared Patient Patterns (NBER)](https://www.nber.org/research/data/physician-shared-patient-patterns-data)
-- [Reference structure: JeremyMorgan/neo4j-airport-resilience-agent](https://github.com/JeremyMorgan/neo4j-airport-resilience-agent)
+*"Repeal this section — what breaks?"* US Code has explicit cross-references and
+the counterfactual is clean, but parsing the XML is a slog and the demo is hard
+to make visual in 60 seconds. Not developed.
 
 ---
+
+# Scorecard
+
+| | C1 hook | C4 metric | C5 honesty | C10 legible | C12 retrieval | Novelty | Data risk |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **1. Retraction contagion** | ★★★ | ★★★ | ★★★ | ★★★ | ★★★ | ★★★ | low |
+| 2. Dependency blast radius | ★★★ | ★★ | ★★ | ★★★ | ★★★ | ★★ | low |
+| 3. Paper mill clusters | ★★ | ★★★ | ★★ | ★★ | ★★ | ★★★ | medium |
+| 4. Sanctions ownership | ★★★ | ★★ | ★★★ | ★★★ | ★★ | ★ | low |
+| 5. Statutory repeal | ★★★ | ★★ | ★★ | ★ | ★★ | ★★ | high |
+| — Medicare (parked) | ★ | ★★★ | ★★★ | ★ | ★★ | ★★ | low |
+
+---
+
+# Recommendation
+
+**Candidate 1, with Candidate 3 folded in as a feature.**
+
+It inherits Jeremy's entire structure, fills the retrieval gap he leaves open,
+and the node-budget constraint pushes it somewhere genuinely new: an LLM
+deciding, edge by edge, whether a citation actually carries weight. The demo
+lands in one sentence and the honesty caveat is sharp rather than defensive.
+
+## Next step before committing
+
+One pilot, roughly an hour: take a single seed (Wakefield or Surgisphere), pull
+its direct citers from OpenAlex, and hand ~100 citation contexts to a model to
+classify as load-bearing / background / critical. If that classification is
+reliable, the project works. If it is not, the whole design collapses and
+Candidate 2 is the fallback.
+
+**Do not load anything into Aura until that pilot runs.**
 
 ## Decision log
 
 | Date | Decision |
 | --- | --- |
-| 2026-09-18 | Repo scaffolded. Direction not locked; Candidate A front-runner. |
-| 2026-09-18 | Verified BigQuery tables and LEIE overlap. No provider-to-provider edges exist in `cms_medicare`; they must be derived. LEIE NPI coverage is 10.6%, giving 149 FL labels. South Florida 2015 is the recommended scope at 269k billed edges. GraphRAG hinges on embedding `hcpcs_description` + enforcement narratives as the entry point into the graph. |
+| 2026-09-18 | Repo scaffolded. |
+| 2026-09-18 | Medicare direction verified feasible (see parked doc), then set aside — weak on C10 and C12. |
+| 2026-09-18 | Extracted 11 reusable concepts from Jeremy's repo into docs/CONCEPTS.md; identified C12 (retrieval as graph entry point) as the gap his workshop leaves. |
+| 2026-09-18 | Retraction contagion recommended. Gen-2 fan-out measured at ~1.8M works for one seed, which rules out breadth-first traversal and motivates LLM-classified selective traversal. Pilot required before load. |

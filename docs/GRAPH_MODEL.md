@@ -1,7 +1,9 @@
 # Graph model — proposed
 
-Status: **proposed, not built.** Follows from Candidate A in [IDEATION.md](../IDEATION.md).
-Scope is South Florida, 2015.
+Status: **parked.** This models the Medicare candidate, which was set aside on
+2026-09-18 — see [../IDEATION.md](../IDEATION.md) for the current direction and
+[CANDIDATE-MEDICARE.md](CANDIDATE-MEDICARE.md) for the feasibility work it rests
+on. Kept because the sizing method transfers. Scope was South Florida, 2015.
 
 ## Shape
 
