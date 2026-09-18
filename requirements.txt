@@ -1,0 +1,6 @@
+neo4j>=6.0,<7.0
+python-dotenv>=1.0,<2.0
+
+# Uncomment as the data pipeline comes online.
+# google-cloud-bigquery>=3.25,<4.0
+# pandas>=2.2,<3.0

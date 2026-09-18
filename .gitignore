@@ -1,0 +1,50 @@
+# ---------------------------------------------------------------------------
+# SECRETS — never commit. The hackathon Aura credentials live in keys/.
+# ---------------------------------------------------------------------------
+keys/
+llinks/
+.env
+.env.*
+!.env.example
+
+# Aura console credential downloads, wherever they land
+Neo4j-*.txt
+*.key
+*.pem
+credentials.json
+service-account*.json
+gcp-*.json
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+
+# ---------------------------------------------------------------------------
+# Data — raw pulls and derived extracts stay local; only loaders are committed
+# ---------------------------------------------------------------------------
+data/raw/*
+data/processed/*
+!data/**/.gitkeep
+data/manifest.json
+*.csv
+*.parquet
+*.dat
+
+# ---------------------------------------------------------------------------
+# OS / editor
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/*
+!.vscode/mcp.json
+!.vscode/extensions.json

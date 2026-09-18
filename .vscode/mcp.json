@@ -1,0 +1,13 @@
+{
+  "servers": {
+    "neo4j-aura": {
+      "type": "http",
+      "url": "https://<YOUR_INSTANCE_ID>.mcp-instances.neo4j.io"
+    },
+    "neo4j-graphacademy": {
+      "type": "http",
+      "url": "https://mcp.graphacademy.neo4j.com/mcp"
+    }
+  },
+  "inputs": []
+}
