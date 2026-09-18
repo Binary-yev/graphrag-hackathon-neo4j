@@ -157,6 +157,70 @@ and it is the novel part of this project.
 
 ---
 
+## How this is GraphRAG
+
+Neo4j defines GraphRAG as retrieval that uses "the rich context in graph data
+structures," running the usual three RAG phases — **retrieval, augmentation,
+generation** — but with a graph in the retrieval step. Their documented retrieval
+patterns are: vector/index search as an *entry point*, neighbourhood traversal,
+path traversal, dynamic Cypher generation, and agentic traversal.
+
+Mapped onto this project:
+
+| GraphRAG element | How this project does it |
+| --- | --- |
+| **Unstructured text corpus** | OpenAlex abstracts, Crossref retraction-notice text, Retraction Watch `Notes` |
+| **Embedding / vector index** | `:Paper(embedding)` and `:Retraction(embedding)` in Aura |
+| **Vector search as entry point** | "papers depending on the claim that propofol suppresses tumour migration" → lands on seed `:Paper` nodes |
+| **Neighbourhood traversal** | reverse `:CITES` from the seed — who cited this |
+| **Path traversal** | multi-hop descent, restricted to `classification = 'load-bearing'` |
+| **Structured graph context** | authors, journals, topics, retraction dates and reasons attached to every node |
+| **Dynamic Cypher** | agent writes read-only Cypher per question via Aura MCP |
+| **Agentic traversal** | agent chains retrieve → classify → traverse → rank, and follows up on its own findings |
+| **Augmentation** | context handed to the LLM is structured evidence — counts, classified edge lists, paths — not raw chunks |
+| **Generation** | answer cites titles, counts, classification breakdown, and the Cypher used |
+
+In `neo4j-graphrag-python` terms the core is a **`VectorCypherRetriever`** —
+vector search for the entry node, Cypher for the surrounding structure — wrapped
+in agentic tool selection.
+
+### Why vector-only RAG fails here, demonstrably
+
+This project has an unusually clean proof that plain RAG is insufficient, and it
+is the Wakefield case.
+
+Ask a vector-only system "what depends on the Wakefield MMR paper?" and its
+nearest neighbours in embedding space are the misinformation and vaccine-
+hesitancy literature — papers about Wakefield, densely similar in topic.
+
+Those are **exactly the wrong answer.** They are the papers that depend on it
+*least*: they cite it to refute it.
+
+Semantic similarity is not dependency. Nothing in the text of a citing paper
+reliably says "I am standing on this" — that lives in the edge, and in what the
+edge means. Vector search cannot see edges. The graph is not an optimisation
+here; it is the only thing that can answer the question.
+
+### What this project does not do
+
+Being honest about the boundary: some people use "GraphRAG" to mean
+Microsoft's variant — LLM extraction of entities and relationships from raw text
+to *construct* a knowledge graph, then community detection and summarisation for
+global queries.
+
+This project does not do that, because it does not need to: OpenAlex already
+publishes the citation graph, so extraction would be re-deriving worse data.
+
+What it does instead is **LLM-driven edge enrichment** — a model reads each
+citation and writes a `classification` property onto the `:CITES` relationship.
+That is the same idea as entity extraction, applied to edge semantics rather
+than node discovery, and it is what makes traversal selective.
+
+Community detection is not in scope for the first build, but it is the obvious
+extension for the paper-mill cluster feature.
+
+---
+
 ## Where the data lives
 
 All three sources are free, public, and need no API key or registration.
