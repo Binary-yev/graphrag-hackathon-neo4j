@@ -105,7 +105,8 @@ up the server.
 | [.github/skills/](.github/skills/) | Reusable agent workflows |
 | [cypher/](cypher/) | Reference Cypher queries |
 | [data/](data/) | Source and derived data — contents gitignored |
-| [docs/](docs/) | Working notes, data dictionaries, modelling decisions |
+| [docs/GRAPH_MODEL.md](docs/GRAPH_MODEL.md) | Proposed graph schema, node/edge budget |
+| [sql/](sql/) | BigQuery sizing and extraction queries |
 | [scripts/](scripts/) | Python utilities (connection, schema, loaders) |
 | `keys/` | Aura credentials — **gitignored, never committed** |
 
