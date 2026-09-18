@@ -25,6 +25,8 @@ garnish. The target shape:
 
 # Candidate 1 — Retraction contagion  ★ recommended
 
+**Full proposal with a worked example: [docs/PROPOSAL-RETRACTION-CONTAGION.md](docs/PROPOSAL-RETRACTION-CONTAGION.md)**
+
 **The hook.** *"This paper was retracted. What is still standing on top of it?"*
 
 That is C1 with the serial numbers filed off — a retraction is an outage, and

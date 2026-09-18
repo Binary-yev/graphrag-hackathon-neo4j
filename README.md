@@ -101,6 +101,7 @@ up the server.
 | --- | --- |
 | [AGENTS.md](AGENTS.md) | Rules and conventions for AI agents working in this repo |
 | [IDEATION.md](IDEATION.md) | Candidate directions, scored and ranked |
+| [docs/PROPOSAL-RETRACTION-CONTAGION.md](docs/PROPOSAL-RETRACTION-CONTAGION.md) | Current front-runner: full proposal with worked example |
 | [docs/CONCEPTS.md](docs/CONCEPTS.md) | Reusable design concepts extracted from prior art |
 | [.github/agents/](.github/agents/) | Custom domain-agent definitions |
 | [.github/skills/](.github/skills/) | Reusable agent workflows |
